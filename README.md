@@ -13,6 +13,10 @@ and forge a ready-to-build proxy DLL — in one command.
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE-T1574.002-red.svg)](https://attack.mitre.org/techniques/T1574/002/)
 [![Status](https://img.shields.io/badge/Status-Research-orange.svg)]()
 
+<br>
+
+<img src="docs/images/scan.png" alt="SxSHADOW scan output — banner and top 10 hijack candidates" width="900">
+
 </div>
 
 ---
@@ -106,6 +110,13 @@ python sxshadow.py scan --arch x64 `
     --baseline-csv baseline.csv
 ```
 
+A scan against a stock Windows install surfaces tens of thousands of
+candidates — ranked, filtered, and ready for triage:
+
+<p align="center">
+  <img src="docs/images/scan.png" alt="Scan results — 12,638 binaries, top 10 hijack candidates with score 97/100" width="900">
+</p>
+
 **Key flags**
 
 | Flag                       | Description                                           |
@@ -137,6 +148,15 @@ python sxshadow.py forge --binary ngen.exe --dll vcruntime140_1_clr0400.dll `
     --payload sc.bin
 ```
 
+Forge prints a full candidate-detail panel — host binary path, architecture,
+Authenticode status, host + DLL SHA-256, score breakdown, suggested staging
+path, attack steps, and defensive-priority awareness — then writes the
+complete proxy bundle to disk:
+
+<p align="center">
+  <img src="docs/images/forge.png" alt="Forge output — candidate detail panel with score 97/100 and full attack steps" width="900">
+</p>
+
 The output bundle (`output/<dll-stem>/`) contains:
 
 ```
@@ -161,6 +181,31 @@ python sxshadow.py auto --arch x64 --payload-type shellcode --payload sc.bin
 
 ---
 
+## Proof of Concept
+
+End-to-end demonstration against the top scoring candidate
+(`ngen.exe` + `vcruntime140_1_clr0400.dll`, score **97/100**):
+
+1. `scan` ranks `ngen.exe` / `vcruntime140_1_clr0400.dll` first.
+2. `forge` emits a proxy DLL that forwards all 3 real exports and fires
+   `DllMain` on load.
+3. The compiled proxy + a copy of the signed `ngen.exe` are staged side by
+   side in an operator-controlled directory.
+4. Executing the Microsoft-signed `ngen.exe` from that directory loads the
+   proxy via standard DLL search order — `DllMain` runs inside the
+   Authenticode-signed process:
+
+<p align="center">
+  <img src="docs/images/poc.png" alt="Proof of concept — DllMain fires inside Microsoft-signed ngen.exe via WinSxS component store DLL hijack" width="900">
+</p>
+
+The process tree shows `ngen.exe` (Microsoft-signed, from WinSxS).
+The image-load record shows `vcruntime140_1_clr0400.dll` (operator-controlled).
+The signed binary is doing exactly what it was designed to do — load its
+declared imports from the working directory. **MITRE T1574.002** in one screen.
+
+---
+
 ## Project Structure
 
 ```
@@ -181,6 +226,7 @@ core/
 forge/
   __init__.py
   proxy_gen.py          proxy DLL C source + DEF + build script generator
+  templates/            Jinja2 templates for proxy_dll.c, proxy.def, build.bat
 
 output/
   __init__.py
@@ -188,6 +234,9 @@ output/
   packager.py           bundles proxy source + host binary + staging README
   sigma.py              Sigma detection-rule emitter
   csv_export.py         SIEM CSV + baseline integrity CSV
+
+docs/
+  images/               README screenshots
 ```
 
 ---
