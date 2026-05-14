@@ -1,0 +1,45 @@
+@echo off
+:: WRAITH build script — {{ target_dll }}
+:: Generated: {{ timestamp }}
+::
+:: Requirements (pick one):
+::   A) Visual Studio Build Tools (cl.exe + link.exe in PATH)
+::   B) LLVM-MinGW or mingw-w64 (x86_64-w64-mingw32-gcc in PATH)
+::
+:: Usage: build.bat [msvc|mingw]
+
+set TARGET={{ target_dll }}
+set SOURCE={{ c_filename }}
+set DEFFILE={{ target_dll_stem }}.def
+set ARCH={{ arch }}
+
+if /I "%1"=="msvc" goto msvc
+if /I "%1"=="mingw" goto mingw
+
+:: Auto-detect
+where cl.exe >nul 2>&1 && goto msvc
+where x86_64-w64-mingw32-gcc.exe >nul 2>&1 && goto mingw
+echo [WRAITH] ERROR: Neither cl.exe nor mingw gcc found in PATH.
+echo          Install Visual Studio Build Tools or mingw-w64.
+exit /b 1
+
+:msvc
+echo [WRAITH] Building with MSVC ...
+cl.exe /nologo /LD /Fe:"%TARGET%" "%SOURCE%" /link /DEF:"%DEFFILE%" kernel32.lib
+if errorlevel 1 ( echo [WRAITH] MSVC build FAILED. & exit /b 1 )
+echo [WRAITH] Built: %TARGET%
+goto done
+
+:mingw
+echo [WRAITH] Building with MinGW-w64 ...
+{% if arch == "x64" %}
+x86_64-w64-mingw32-gcc -shared -o "%TARGET%" "%SOURCE%" "%DEFFILE%" -lkernel32 -s -Wall
+{% else %}
+i686-w64-mingw32-gcc -shared -o "%TARGET%" "%SOURCE%" "%DEFFILE%" -lkernel32 -s -Wall
+{% endif %}
+if errorlevel 1 ( echo [WRAITH] MinGW build FAILED. & exit /b 1 )
+echo [WRAITH] Built: %TARGET%
+goto done
+
+:done
+echo [WRAITH] Done.  Place alongside: {{ binary_name }}

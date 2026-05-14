@@ -1,0 +1,73 @@
+# ─── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Type checkers / linters
+.mypy_cache/
+.pytype/
+.pyre/
+.ruff_cache/
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+
+# ─── IDE / OS ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── SxSHADOW PoC / forge artifacts ────────────────────────────────────────
+# `output/` is a Python package (output/__init__.py, output/*.py) AND the
+# default --out directory for forged proxies, packaged binaries, scan reports,
+# build artifacts, etc. Track only the .py source; ignore everything else.
+output/*/
+output/*.json
+output/*.html
+output/*.csv
+output/*.yml
+output/*.yaml
+
+# Compiled proxy DLLs / build leftovers
+*.dll
+*.exe
+*.lib
+*.exp
+*.obj
+*.o
+*.pdb
+*.ilk
+
+# Scan / report artifacts at repo root
+*.json
+*.html
+*.csv
+results.*
+report.*
+poster*.png
+post.txt
+build_poster.py

@@ -1,0 +1,16 @@
+; WRAITH proxy DEF file — {{ target_dll }} forwarding to {{ real_dll_basename }}
+; Generated: {{ timestamp }}
+;
+; Used by MinGW linker as an alternative to the #pragma comment approach.
+; MSVC users can also pass /DEF:{{ target_dll_stem }}.def to the linker.
+
+LIBRARY "{{ output_dll_name }}"
+
+EXPORTS
+{% for exp in exports %}
+{% if exp.name %}
+    {{ exp.name }} = {{ real_dll_basename }}.{{ exp.name }} @{{ exp.ordinal }}
+{% else %}
+    @{{ exp.ordinal }} = {{ real_dll_basename }}.#{{ exp.ordinal }} @{{ exp.ordinal }} NONAME
+{% endif %}
+{% endfor %}
